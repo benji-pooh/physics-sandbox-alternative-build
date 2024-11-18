@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Physics Sandbox</title>
+        <style>/* Previous styles remain the same */body { margin: 0; padding: 20px; font-family: Arial, sans-serif; background: #f0f0f0; } #canvas-container { background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; position: relative; cursor: crosshair; } .controls { margin: 20px 0; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; } .control-group { display: flex; align-items: center; gap: 10px; padding: 10px; background: white; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); } button { padding: 8px 16px; border: none; border-radius: 4px; background: #4CAF50; color: white; cursor: pointer; transition: background 0.3s; } button.active { background: #2E7D32; box-shadow: inset 0 0 5px rgba(0,0,0,0.2); } button:hover { background: #45a049; } input[type="number"], input[type="color"] { padding: 5px;  /* border: 1px solid#ddd */ border-radius: 5px; } input[type="color"] { width: 51px; height: 30px; padding: 0; } #error-message { color: red; padding: 10px; display: none; } .checkbox-group { display: flex; align-items: center; gap: 5px; } label { user-select: none; }</style>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto&display=swap">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+        <link rel="stylesheet" href="materialize/css/materialize.min.css">
+    </head>
+    <body>
+        <div id="error-message"></div>
+        <div class="controls">
+            <div class="control-group">
+                <button id="circleBtn" onclick="setShape('circle')" class="active" style="font-family: 'Roboto', sans-serif; font-weight: 700; letter-spacing: 1px; font-style: normal; font-variant: normal; border-radius: 1px; border-width: 0px; outline: none; box-shadow: 0 4px 21px -6px #000000;">Circle</button>
+                <button id="rectangleBtn" onclick="setShape('rectangle')" style="font-family: 'Roboto', sans-serif; font-weight: 700; letter-spacing: 1px; font-style: normal; font-variant: normal; border-radius: 1px; border-width: 0px; outline: none; box-shadow: 0 4px 21px -6px #000000;">Rectangle</button>
+                <button id="triangleBtn" onclick="setShape('triangle')" style="font-family: 'Roboto', sans-serif; font-weight: 700; letter-spacing: 1px; font-style: normal; font-variant: normal; border-radius: 1px; border-width: 0px; outline: none; box-shadow: 0 4px 21px -6px #000000;">Triangle</button>
+            </div>
+            <div class="control-group">
+                <label style="font-family: 'Roboto', sans-serif;">Color:</label>
+                <input type="color" id="shapeColor" value="#4CAF50">
+            </div>
+            <div class="control-group">
+                <label style="font-family: 'Roboto', sans-serif;">Gravity X:</label>
+                <input type="number" id="gravityX" value="0" step="0.1" style="width: 60px; font-size: 12pt;">
+                <label>Y:</label>
+                <input type="number" id="gravityY" value="1" step="0.1" style="width: 60px; font-size: 12pt;">
+                <button onclick="updateGravity()" style="font-family: 'Roboto', sans-serif; font-weight: 700; letter-spacing: 1px; font-style: normal; font-variant: normal; border-radius: 1px; border-width: 0px; outline: none; box-shadow: 0 4px 21px -6px #000000;">Update Gravity</button>
+            </div>
+            <div class="control-group" style="font-family: 'Roboto', sans-serif;">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="cursorPlace" checked>
+                    <label for="cursorPlace" style="font-family: 'Roboto', sans-serif;">Place at Cursor</label>
+                </div>
+            </div>
+            <div class="control-group">
+                <button onclick="clearBodies()" style="font-family: 'Roboto', sans-serif; font-weight: 700; letter-spacing: 1px; font-style: normal; font-variant: normal; border-radius: 1px; border-width: 0px; outline: none; box-shadow: 0 4px 21px -6px #000000;">Clear All</button>
+            </div>
+        </div>
+        <div id="canvas-container"></div>
+        <script>
+        let engine, render, mouse, mouseConstraint;
+        let currentShape = 'circle';
+
+        // Load Matter.js and initialize
+        async function initPhysicsSandbox() {
+            try {
+                await loadScript('https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js');
+                
+                // Create engine
+                engine = Matter.Engine.create({
+                    enableSleeping: false
+                });
+
+                // Create renderer
+                render = Matter.Render.create({
+                    element: document.getElementById('canvas-container'),
+                    engine: engine,
+                    options: {
+                        width: 800,
+                        height: 600,
+                        wireframes: false,
+                        background: '#ffffff'
+                    }
+                });
+
+                // Create walls
+                const walls = [
+                    Matter.Bodies.rectangle(400, 610, 810, 60, { isStatic: true }),
+                    Matter.Bodies.rectangle(400, -10, 810, 60, { isStatic: true }),
+                    Matter.Bodies.rectangle(-10, 300, 60, 610, { isStatic: true }),
+                    Matter.Bodies.rectangle(810, 300, 60, 610, { isStatic: true })
+                ];
+
+                walls.forEach(wall => {
+                    wall.render.fillStyle = '#222222';
+                });
+
+                Matter.Composite.add(engine.world, walls);
+
+                // Add mouse control
+                mouse = Matter.Mouse.create(render.canvas);
+                mouseConstraint = Matter.MouseConstraint.create(engine, {
+                    mouse: mouse,
+                    constraint: {
+                        stiffness: 0.2,
+                        render: { visible: false }
+                    }
+                });
+
+                Matter.Composite.add(engine.world, mouseConstraint);
+                render.mouse = mouse;
+
+                // Add click handler
+                render.canvas.addEventListener('click', handleCanvasClick);
+
+                // Start the engine and renderer
+                Matter.Runner.run(engine);
+                Matter.Render.run(render);
+
+            } catch (error) {
+                showError('Failed to initialize physics sandbox: ' + error.message);
+            }
+        }
+
+        // Load script helper
+        function loadScript(url) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = url;
+                script.onload = resolve;
+                script.onerror = () => reject(new Error(`Failed to load script: ${url}`));
+                document.head.appendChild(script);
+            });
+        }
+
+        // Error handling
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.style.display = 'block';
+            errorDiv.textContent = message;
+        }
+
+        // Shape creation handler
+        function handleCanvasClick(event) {
+            if (!document.getElementById('cursorPlace').checked) return;
+
+            const rect = render.canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            createShape(x, y);
+        }
+
+        // Create shape at position
+        function createShape(x, y) {
+            const color = document.getElementById('shapeColor').value;
+            let body;
+
+            switch (currentShape) {
+                case 'circle':
+                    body = Matter.Bodies.circle(x, y, 20, {
+                        render: { fillStyle: color }
+                    });
+                    break;
+                case 'rectangle':
+                    body = Matter.Bodies.rectangle(x, y, 40, 40, {
+                        render: { fillStyle: color }
+                    });
+                    break;
+                case 'triangle':
+                    body = Matter.Bodies.polygon(x, y, 3, 25, {
+                        render: { fillStyle: color }
+                    });
+                    break;
+            }
+
+            if (body) {
+                Matter.Composite.add(engine.world, body);
+            }
+        }
+
+        // Set active shape
+        function setShape(shape) {
+            currentShape = shape;
+            // Update button styles
+            document.querySelectorAll('.control-group button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(shape + 'Btn').classList.add('active');
+        }
+
+        // Update gravity
+        function updateGravity() {
+            const x = parseFloat(document.getElementById('gravityX').value);
+            const y = parseFloat(document.getElementById('gravityY').value);
+            engine.world.gravity.x = x;
+            engine.world.gravity.y = y;
+        }
+
+        // Clear all non-static bodies
+        function clearBodies() {
+            const bodies = Matter.Composite.allBodies(engine.world);
+            bodies.forEach(body => {
+                if (!body.isStatic) {
+                    Matter.Composite.remove(engine.world, body);
+                }
+            });
+        }
+
+        // Initialize the sandbox
+        initPhysicsSandbox().catch(error => {
+            showError('Failed to start physics sandbox: ' + error.message);
+        });
+    </script>
+        <script src="materialize/js/materialize.min.js"></script>
+    </body>
+</html>
